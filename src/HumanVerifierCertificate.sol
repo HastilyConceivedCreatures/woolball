@@ -9,7 +9,7 @@ contract humanVerfierCertificate is IHumanVerifier {
     function verify (
         bytes calldata proof,
         uint256 nameID,
-        uint256 verifiedForTimestamp,
+        uint256 verifiedForTimestamp
     ) public returns (bool) {
 
         bytes32[] memory publicInputs = new bytes32[](6);

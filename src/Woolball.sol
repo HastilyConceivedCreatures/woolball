@@ -7,7 +7,7 @@ import "./StringUtils.sol";
 import "./interfaces/IWoolball.sol";
 import "./interfaces/INamePricing.sol";
 import "./interfaces/IhumanVerifier.sol";
-import "./humanVerifierCertificate.sol";
+import "./HumanVerifierCertificate.sol";
 
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
 import "openzeppelin-contracts/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
@@ -189,7 +189,7 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable {
         // Set the details of the new name
         _names[nameID].name = name;
         _names[nameID].nameType = NameType.HUMAN;
-        _names[nameID].paidTill = block.timestamp + duration_in_weeks * weeks;
+        _names[nameID].paidTill = block.timestamp + duration_in_weeks * 1 weeks;
         _names[nameID].creatorWallet = creator;
         _names[nameID].verifiedTill = block.timestamp; // need still to verify humanity
         _names[nameID].pubkeyX = pubkeyX;
@@ -267,7 +267,7 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable {
         // Set the details of the new name
         _names[nameID].name = name;
         _names[nameID].nameType = NameType.ARTIFICIAL;
-        _names[nameID].paidTill = block.timestamp + duration_in_weeks * weeks;
+        _names[nameID].paidTill = block.timestamp + duration_in_weeks * 1 weeks;
         _names[nameID].creatorNameID = creatorNameID;
         _names[nameID].pubkeyX = pubkeyX;
         _names[nameID].pubkeyY = pubkeyY;
@@ -307,7 +307,7 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable {
     {
         // If the parent name is a HUMAN type, ensure it is verified
         require((_names[nameID].nameType != NameType.HUMAN) || 
-                isHumanNameVerified(nameID) ), 
+                isHumanNameVerified(nameID) , 
             "Woolball: creatorNameID is not verified as a human name");
 
         // Generate a unique ID for the subname
@@ -363,7 +363,7 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable {
             humanVerifierContract = IHumanVerifier(humanVerifierAddress);
         }
 
-        bool verificationResult = humanVerifierContract.verify(
+        verificationResult = humanVerifierContract.verify(
             proof,
             nameID,
             verifiedForTimestamp
@@ -461,8 +461,8 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable {
     ) public view virtual returns (uint256) {
         // For HUMAN names, return the minimum of paidTill and verifiedTill + grace period
         if ((_names[nameID].nameType == NameType.HUMAN) ) {
-             uint256 paidTill = _names[nameID].paidTill 
-             uint256 verifiedTillPlusGrace = _names[nameID].verifiedTill + verificationGracePeriod * days;
+             uint256 paidTill = _names[nameID].paidTill;
+             uint256 verifiedTillPlusGrace = _names[nameID].verifiedTill + verificationGracePeriod * 1 days;
              uint256 expirationTimestamp = paildTill < verifiedTillPlusGrace ? paildTill : verifiedTillPlusGrace;
 
              return expirationTimestamp > block.timestamp ? expirationTimestamp : 0;
@@ -629,7 +629,7 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable {
                 _names[tokenID].verified = false;
 
                 // The owner has verificationGracePeriod days to submit a proof of humanity
-                _names[tokenID].paidTill = block.timestamp + verificationGracePeriod days;
+                _names[tokenID].paidTill = block.timestamp + verificationGracePeriod * 1 days;
             }
         }
 
