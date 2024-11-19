@@ -1,10 +1,11 @@
-// contracts/BabyWoolball.sol
+// contracts/Woolball.sol
 // SPDX-License-Identifier: MIT
 
 pragma solidity >=0.8.28;
 
 import "./StringUtils.sol";
 import "./interfaces/IWoolball.sol";
+import "./interfaces/IWoolballErrors.sol"
 import "./interfaces/INamePricing.sol";
 import "./interfaces/IhumanVerifier.sol";
 import "./HumanVerifierCertificate.sol";
@@ -65,7 +66,7 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable {
     modifier requireNameOwner(uint256 nameID) {
         require(
             ownerOf(nameID) == msg.sender,
-            "Baby  Woolball: sender is not the owner of the name."
+            "Woolball: sender is not the owner of the name."
         );
         _;
     }
@@ -74,7 +75,7 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable {
         // Names are registered if their expiration date is bigger than current time
         require(
             doesNameExist(nameID),
-            "Woolball: nameID doesn't exist"
+            WoolballNonexistentName(nameID)
         );
 
         _;
@@ -609,27 +610,27 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable {
         }
     }
 
+    function function ownerOf(uint256 nameID) public view virtual requireNameExists(nameID) publicreturns (address) {
+        return ERC721Enumerable.ownerOf(tokenID);
+    }
+
     // Handles the specifics of transfering names.
     function _update(
         address to,
         uint256 tokenID,
         address auth
-    ) internal virtual override returns (address) {
-        // Check conditions for human name
+    ) internal virtual override requireNameExists(tokenID) returns (address) {
+        // Verify conditions for transfering a human name
         if (_names[tokenID].nameType == NameType.HUMAN) {
             // An address can at most own one human name
             require(
-                humanNames[to] == 0,
+                hasHumanName(to),
                 "Woolball: target already has a name."
             );
 
-            // Transfering a verified name nullifies its verification
-            if (_names[tokenID].verified) {
-                // remove verification
-                _names[tokenID].verified = false;
-
-                // The owner has verificationGracePeriod days to submit a proof of humanity
-                _names[tokenID].paidTill = block.timestamp + verificationGracePeriod * 1 days;
+            // Transfering a human name nullifies its verification
+            if (_names[nameID].verifiedTill > block.timestamp) {
+                _names[nameID].verifiedTill = block.timestamp;;
             }
         }
 
