@@ -1,7 +1,7 @@
 pragma solidity >=0.8.28;
 
 
-interface IhumanVerifier {
+interface IHumanVerifier {
     function verify (
         bytes calldata proof,
         bytes32 pubkeyX,

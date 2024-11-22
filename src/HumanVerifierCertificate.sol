@@ -1,10 +1,14 @@
 pragma solidity >=0.8.28;
 
-import "./interfaces/IhumanVerifier.sol";
+import "./interfaces/IHumanVerifier.sol";
 import "./plonk_vk.sol";
 
-contract humanVerfierCertificate is IhumanVerifier {
-    UltraVerifier humanVerifierContract;
+contract HumanVerfierCertificate is IHumanVerifier {
+    UltraVerifier internal humanVerifierContract;
+
+    constructor(UltraVerifier humanVerifierContractConstructor) {
+        humanVerifierContract = humanVerifierContractConstructor;
+    }
 
     function verify (
         bytes calldata proof,

@@ -7,7 +7,7 @@ import "./StringUtils.sol";
 import "./interfaces/IWoolball.sol";
 import {IWoolballErrors} from "./interfaces/IWoolballErrors.sol";
 import "./interfaces/INamePricing.sol";
-import {IhumanVerifier} from "./interfaces/IhumanVerifier.sol";
+import {IHumanVerifier} from "./interfaces/IHumanVerifier.sol";
 import "./HumanVerifierCertificate.sol";
 
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
@@ -38,7 +38,7 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable, IWoolballErrors {
     mapping(address => bool) private _approvedHumanVerifiers;    
 
     // The main proof of humanity contract
-    IhumanVerifier public mainHumanVerifierContract;
+    IHumanVerifier public mainHumanVerifierContract;
 
     // The Merkle root of the set of trusted entities for makign proof of humanity
     bytes32 public societyRoot;
@@ -137,11 +137,11 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable, IWoolballErrors {
         string memory name,
         string memory symbol,
         address initialOwner,
-        address verifierContract,
-        address namePricingContractAddress
+        IHumanVerifier verifierContractConstructor,
+        INamePricing namePricingContractConstructor
     ) Ownable(initialOwner) ERC721(name, symbol) {
-        mainHumanVerifierContract = IhumanVerifier(verifierContract);
-        namePricingContract = INamePricing(namePricingContractAddress);
+        mainHumanVerifierContract = verifierContractConstructor;
+        namePricingContract = namePricingContractConstructor;
         verificationGracePeriod = 30;
     }
 
@@ -351,7 +351,7 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable, IWoolballErrors {
         address humanVerifierAddress
     ) public virtual requireNameExists(nameID) {
         bool verificationResult = false;
-        IhumanVerifier humanVerifierContract = IhumanVerifier(address(0));
+        IHumanVerifier humanVerifierContract = IHumanVerifier(address(0));
 
         if (humanVerifierAddress == address(0)) {
             // User default verifier if none is given
@@ -360,8 +360,8 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable, IWoolballErrors {
             // Check the given verifier is authorized
             require (_approvedHumanVerifiers[humanVerifierAddress], "Woolball: humanVerifierAddress is not an approved verifying contract.");
             
-            // Cast the verifier address to IhumanVerifier interface
-            humanVerifierContract = IhumanVerifier(humanVerifierAddress);
+            // Cast the verifier address to IHumanVerifier interface
+            humanVerifierContract = IHumanVerifier(humanVerifierAddress);
         }
 
         verificationResult = humanVerifierContract.verify(
