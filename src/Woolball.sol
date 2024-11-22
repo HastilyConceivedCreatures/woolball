@@ -5,9 +5,9 @@ pragma solidity >=0.8.28;
 
 import "./StringUtils.sol";
 import "./interfaces/IWoolball.sol";
-import "./interfaces/IWoolballErrors.sol"
+import {IWoolballErrors} from "./interfaces/IWoolballErrors.sol";
 import "./interfaces/INamePricing.sol";
-import "./interfaces/IhumanVerifier.sol";
+import {IhumanVerifier} from "./interfaces/IhumanVerifier.sol";
 import "./HumanVerifierCertificate.sol";
 
 import "openzeppelin-contracts/contracts/access/Ownable.sol";
@@ -19,7 +19,7 @@ import {Strings} from "openzeppelin-contracts/contracts/utils/Strings.sol";
  * @dev Woolball Registry contract
  * @dev A name system for humans only
  */
-contract Woolball is IWoolball, Ownable, ERC721Enumerable {
+contract Woolball is IWoolball, Ownable, ERC721Enumerable, IWoolballErrors {
     // NONE = uninitiated
     // HUMAN - a human name, e.g., 'neiman#'
     // ARTIFICIAL - a nonhuman name, created by a human, e.g., 'woolball##'
@@ -35,13 +35,13 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable {
     uint256 verificationGracePeriod;
 
     // mapping of approved contract for verifying human
-    mapping(IhumanVerifier => bool) private _approvedHumanVerifiers;    
+    mapping(address => bool) private _approvedHumanVerifiers;    
 
     // The main proof of humanity contract
-    IHumanVerifier mainHumanVerifierContract;
+    IhumanVerifier public mainHumanVerifierContract;
 
     // The Merkle root of the set of trusted entities for makign proof of humanity
-    bytes32 societyHash;
+    bytes32 public societyRoot;
 
     struct Name {
         string name;
@@ -49,11 +49,11 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable {
         uint256 paidTill;
         address creatorWallet; // Creator's wallet address (i.e., which wallet address created the name?)
         uint256 creatorNameID; // Creator's Name ID (only for subnames)
-        address data; // Contract holding the name's data
-        uint256[] subnames; // Array of subnames
-        uint256 verifiedTill; // The last timestamp for which the name was verified
-        bytes32 pubkeyX; // X coordinate of the public key of the name holder
-        bytes32 pubkeyY; // Y coordinate of the public key of the name holder
+        address data;          // Contract holding the name's data
+        uint256[] subnames;    // Array of subnames
+        uint256 verifiedTill;  // The last timestamp for which the name was verified
+        bytes32 pubkeyX;       // X coordinate of the public key of the name holder
+        bytes32 pubkeyY;       // Y coordinate of the public key of the name holder
     }
 
     // A table of nameID -> Name structure
@@ -75,7 +75,7 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable {
         // Names are registered if their expiration date is bigger than current time
         require(
             doesNameExist(nameID),
-            WoolballNonexistentName(nameID)
+            WoolballNonExistentName(nameID)
         );
 
         _;
@@ -351,22 +351,26 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable {
         address humanVerifierAddress
     ) public virtual requireNameExists(nameID) {
         bool verificationResult = false;
-        IHumanVerifier humanVerifierContract = IHumanVerifier(address(0));
+        IhumanVerifier humanVerifierContract = IhumanVerifier(address(0));
 
         if (humanVerifierAddress == address(0)) {
             // User default verifier if none is given
             humanVerifierContract = mainHumanVerifierContract;
         } else {
             // Check the given verifier is authorized
-            require (_approvedHumanVerifiers(humanVerifierAddress), "Woolball: humanVerifierAddress is not an approved verifying contract.");
+            require (_approvedHumanVerifiers[humanVerifierAddress], "Woolball: humanVerifierAddress is not an approved verifying contract.");
             
-            // Cast the verifier address to IHumanVerifier interface
-            humanVerifierContract = IHumanVerifier(humanVerifierAddress);
+            // Cast the verifier address to IhumanVerifier interface
+            humanVerifierContract = IhumanVerifier(humanVerifierAddress);
         }
 
         verificationResult = humanVerifierContract.verify(
             proof,
+            _names[nameID].pubkeyX,
+            _names[nameID].pubkeyY,
             nameID,
+            ownerOf(nameID),
+            societyRoot,
             verifiedForTimestamp
         );
 
@@ -402,6 +406,7 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable {
 
         // Delete name
         delete _names[nameID];
+        _burn(nameID);
     }
 
     /**
@@ -426,6 +431,10 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable {
         namePricingContract = INamePricing(_namePricingContract);
     }
 
+    function setSocietyRoot (bytes32 _societyRoot) public virtual onlyOwner {
+        societyRoot = _societyRoot;
+    }
+
     function setPubkey(
         uint256 nameID,
         bytes32 pubkeyX,
@@ -438,13 +447,13 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable {
     function addHumanVerifierContract (
         address humanVerifierContract
     ) public onlyOwner {
-        _approvedHumanVerifiers(IhumanVerifier(humanVerifierContract)) = true;
+        _approvedHumanVerifiers[humanVerifierContract] = true;
     }
 
     function removeHumanVerifierContract (
         address humanVerifierContract
     ) public onlyOwner {
-        _approvedHumanVerifiers(IhumanVerifier(humanVerifierContract)) = false;
+        _approvedHumanVerifiers[humanVerifierContract] = false;
     }
 
     /**
@@ -464,7 +473,7 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable {
         if ((_names[nameID].nameType == NameType.HUMAN) ) {
              uint256 paidTill = _names[nameID].paidTill;
              uint256 verifiedTillPlusGrace = _names[nameID].verifiedTill + verificationGracePeriod * 1 days;
-             uint256 expirationTimestamp = paildTill < verifiedTillPlusGrace ? paildTill : verifiedTillPlusGrace;
+             uint256 expirationTimestamp = paidTill < verifiedTillPlusGrace ? paidTill : verifiedTillPlusGrace;
 
              return expirationTimestamp > block.timestamp ? expirationTimestamp : 0;
 
@@ -499,12 +508,12 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable {
 
     /**
      * @notice Checks if a human name is verified. 
-     *         A human name is verified if it has not expired (`paidTill > block.timestamp`) 
-     *         and is within the verification period (`verifiedTill > block.timestamp`).
+     * @notice A human name is verified if it has not expired (`paidTill > block.timestamp`) 
+     * @notice and is within the verification period (`verifiedTill > block.timestamp`).
      * @param nameID The ID of the human name to check.
      * @return True if the human name is verified, false otherwise.
      */
-    function isHumanNameVerified(nameID) public view requireHumanName(nameID) returns (bool) {
+    function isHumanNameVerified(uint256 nameID) public view requireHumanName(nameID) returns (bool) {
         return _names[nameID].paidTill >= block.timestamp && _names[nameID].verifiedTill >= block.timestamp;    
     }
 
@@ -599,6 +608,7 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable {
 
         // Delete the subname
         delete _names[subnameID];
+        _burn(subnameID);
     }
 
     // Remove all subnames of a name
@@ -607,19 +617,16 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable {
             uint256 subnameID = _names[nameID].subnames[i];
             _removeAllSubnames(subnameID);
             delete _names[subnameID];
+            _burn(subnameID);
         }
     }
 
-    function function ownerOf(uint256 nameID) public view virtual requireNameExists(nameID) publicreturns (address) {
-        return ERC721Enumerable.ownerOf(tokenID);
+    function ownerOf(uint256 nameID) public view virtual override(ERC721, IERC721) requireNameExists(nameID) returns (address) {
+        return ERC721.ownerOf(nameID);
     }
 
     // Handles the specifics of transfering names.
-    function _update(
-        address to,
-        uint256 tokenID,
-        address auth
-    ) internal virtual override requireNameExists(tokenID) returns (address) {
+    function transferFrom(address from, address to, uint256 tokenID) public virtual override(ERC721, IERC721) requireNameExists(tokenID) {
         // Verify conditions for transfering a human name
         if (_names[tokenID].nameType == NameType.HUMAN) {
             // An address can at most own one human name
@@ -629,13 +636,11 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable {
             );
 
             // Transfering a human name nullifies its verification
-            if (_names[nameID].verifiedTill > block.timestamp) {
-                _names[nameID].verifiedTill = block.timestamp;;
+            if (_names[tokenID].verifiedTill > block.timestamp) {
+                _names[tokenID].verifiedTill = block.timestamp;
             }
         }
 
-        address previousOwner = ERC721Enumerable._update(to, tokenID, auth);
-
-        return previousOwner;
+        ERC721.transferFrom(from, to, tokenID);
     }
 }
