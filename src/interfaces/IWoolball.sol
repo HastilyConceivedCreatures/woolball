@@ -38,7 +38,6 @@ interface IWoolball is IERC721 {
 
     function newHumanName(
         string calldata name,
-        address creator,
         bytes32 pubkeyX,
         bytes32 pubkeyY,
         uint32 duration_in_months

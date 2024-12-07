@@ -115,7 +115,7 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable, IWoolballErrors {
 
         // '&' better safe than sorry
         require(
-            !StringUtils.isCharInString(name, ":"),
+            !StringUtils.isCharInString(name, "&"),
             "Woolball: name can't have ':' characters within in"
         );
         _;
@@ -153,7 +153,6 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable, IWoolballErrors {
      *      - The creator must not already own a human name.
      *      - Sufficient payment must be provided to cover the cost of the name.
      * @param name The base name to register (excluding the "#" suffix).
-     * @param creator The address of the creator registering the name.
      * @param pubkeyX The public key (X-coordinate) associated with the name.
      * @param pubkeyY The public key (Y-coordinate) associated with the name.
      * @param duration_in_weeks The duration in weeks for which the name is valid.
@@ -161,11 +160,10 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable, IWoolballErrors {
      */
     function newHumanName(
         string calldata name,
-        address creator,
         bytes32 pubkeyX,
         bytes32 pubkeyY,
         uint32 duration_in_weeks
-    ) public payable virtual requireValidName(name) onlyOwner returns (uint256) {
+    ) public payable virtual requireValidName(name) returns (uint256) {
         // Generate a unique ID for the name by appending "#" and hashing it
         uint256 nameID = uint256(sha256(abi.encodePacked(name, "#")));
 
@@ -177,7 +175,7 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable, IWoolballErrors {
 
         // Verify the creator does not already own a human name
         require(
-            !hasHumanName(creator),
+            !hasHumanName(msg.sender),
             "Woolball: the address already has a name, only one name per address is allwed"
         );
 
@@ -185,13 +183,13 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable, IWoolballErrors {
         uint256 price = namePricingContract.cost(name, duration_in_weeks);
         require(msg.value >= price, "Woolball: insufficient funds.");
 
-        _mint(creator, nameID);
+        _mint(msg.sender, nameID);
 
         // Set the details of the new name
         _names[nameID].name = name;
         _names[nameID].nameType = NameType.HUMAN;
         _names[nameID].paidTill = block.timestamp + duration_in_weeks * 1 weeks;
-        _names[nameID].creatorWallet = creator;
+        _names[nameID].creatorWallet = msg.sender;
         _names[nameID].verifiedTill = block.timestamp; // need still to verify humanity
         _names[nameID].pubkeyX = pubkeyX;
         _names[nameID].pubkeyY = pubkeyY;
@@ -200,16 +198,16 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable, IWoolballErrors {
         if (_names[nameID].subnames.length > 0)
             _removeAllSubnames(nameID);
 
-        // If the creator previously owned a (now expired) human name, clear its data
-        if (humanNames[creator] > 0) {
-            clearExpiredName(humanNames[creator]);
+        // If the msg.sender previously owned a (now expired) human name, clear its data
+        if (humanNames[msg.sender] > 0) {
+            clearExpiredName(humanNames[msg.sender]);
         } 
 
         // Mark the creator's address as associated with the new human name
-        humanNames[creator] = nameID;
+        humanNames[msg.sender] = nameID;
 
         // Emit an event indicating that a human name was created
-        emit humanNameCreated(name, creator);
+        emit humanNameCreated(name, msg.sender);
 
         return nameID;
     }
@@ -344,6 +342,9 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable, IWoolballErrors {
         return subnameID;
     }
 
+    // The proof is made for a name, pubkey and an address, in order to prevent
+    // the case where a name is stolen to a new address but the same proof is 
+    // used to verify its humanity.
     function verifyHuman (
         bytes calldata proof,
         uint256 nameID,
@@ -442,6 +443,16 @@ contract Woolball is IWoolball, Ownable, ERC721Enumerable, IWoolballErrors {
     ) public virtual requireNameOwner(nameID) {
         _names[nameID].pubkeyX = pubkeyX;
         _names[nameID].pubkeyY = pubkeyY;
+    }
+
+    function getPubkey(uint256 nameID) 
+    public 
+    view 
+    returns (bytes32 pubkeyX, bytes32 pubkeyY) 
+    {
+        // Retrieve the public key components from the _names mapping
+        pubkeyX = _names[nameID].pubkeyX;
+        pubkeyY = _names[nameID].pubkeyY;
     }
 
     function addHumanVerifierContract (
